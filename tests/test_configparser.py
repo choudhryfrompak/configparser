@@ -2375,6 +2375,35 @@ class InvalidInputTestCase(unittest.TestCase):
             cfg.write(output)
         output.close()
 
+    def test_newline_in_key(self):
+        # A newline in a key is not caught by the delimiter or
+        # section-pattern checks above (SECTCRE only matches a key that
+        # itself starts with '['), but it lets everything after the
+        # newline land on its own line(s) in the output, which can forge
+        # an additional section header. See e.g. key
+        # "#\n[injected]\nadmin" with value "true": writes cleanly as
+        # "s]\n#\n[injected]\nadmin = true\n", which re-parses as two
+        # sections, 's' and 'injected', with injected.admin == 'true'.
+        cfg = configparser.ConfigParser()
+        cfg.add_section('section1')
+        cfg.set('section1', 'a\nb', 'c')
+        output = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cfg.write(output)
+        output.close()
+
+    def test_newline_in_section_name(self):
+        # Same hazard as test_newline_in_key, but for the section name
+        # itself: _write_section validated option keys (see above) but
+        # never the section name before writing "[{section_name}]\n".
+        cfg = configparser.ConfigParser()
+        cfg.add_section('safe]\n[injected]\nadmin = true\n#')
+        cfg.set('safe]\n[injected]\nadmin = true\n#', 'x', '1')
+        output = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cfg.write(output)
+        output.close()
+
 
 class MiscTestCase(unittest.TestCase):
     def test__all__(self):

@@ -1056,6 +1056,7 @@ class RawConfigParser(MutableMapping):
     def _write_section(self, fp, section_name, section_items, delimiter, unnamed=False):
         """Write a single section to the specified 'fp'."""
         if not unnamed:
+            self._validate_section_name_contents(section_name)
             fp.write("[{}]\n".format(section_name))
         for key, value in section_items:
             self._validate_key_contents(key)
@@ -1298,11 +1299,28 @@ class RawConfigParser(MutableMapping):
 
     def _validate_key_contents(self, key):
         """Raises an InvalidWriteError for any keys containing
-        delimiters or that match the section header pattern"""
+        delimiters, newlines, or that match the section header pattern"""
+        if "\n" in key or "\r" in key:
+            # A newline lets the remainder of the key (and the option
+            # value that follows it) land on their own line(s) in the
+            # output, which can forge an additional "[section]" header
+            # or option line - the same hazard the SECTCRE/delimiter
+            # checks below exist for, just reachable via a different
+            # character.
+            raise InvalidWriteError("Cannot write key that contains newline characters")
         if re.match(self.SECTCRE, key):
             raise InvalidWriteError("Cannot write keys matching section pattern")
         if any(delim in key for delim in self._delimiters):
             raise InvalidWriteError("Cannot write key that contains delimiters")
+
+    def _validate_section_name_contents(self, section_name):
+        """Raises an InvalidWriteError for section names containing
+        newline characters, which can break out of the single-line
+        '[section]' header and forge additional header/option lines."""
+        if "\n" in section_name or "\r" in section_name:
+            raise InvalidWriteError(
+                "Cannot write section name that contains newline characters"
+            )
 
     def _validate_value_types(self, *, section="", option="", value=""):
         """Raises a TypeError for illegal non-string values.
